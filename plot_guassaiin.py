@@ -25,8 +25,8 @@ from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint, Timer
 from ignite.metrics import RunningAverage, Loss
 
-from datasets import get_CIFAR10, get_SVHN
-from mydataset import get_CelebA_data, CelebALoader
+from datasets import postprocess
+from mydataset import get_CelebA_data, CelebALoader, CLEVRDataset
 from model import Glow
 
 def compute_nll(dataset, model, dataloader):
@@ -54,8 +54,8 @@ def compute_nll(dataset, model, dataloader):
 if __name__ == "__main__":
     device = torch.device("cuda")
 
-    output_folder = '0614_0641_logs/'
-    model_name = 'glow_checkpoint_75000.pt'
+    output_folder = '0617_0429_logs_task1/'#'0616_0611_logs_task1/'
+    model_name = 'glow_checkpoint_4502.pt'#'glow_checkpoint_115210.pt'
 
     with open(output_folder + 'hparams.json') as json_file:
         hparams = json.load(json_file)
@@ -64,9 +64,11 @@ if __name__ == "__main__":
     # image_shape, num_classes, _, test_cifar = get_CIFAR10(hparams['augment'], hparams['dataroot'], True)
     # image_shape, num_classes, _, test_svhn = get_SVHN(hparams['augment'], hparams['dataroot'], True)
     image_shape = (64,64,3)
-    num_classes = 40
-    dataset_test = CelebALoader(root_folder=hparams['dataroot']) #'/home/yellow/deep-learning-and-practice/hw7/dataset/task_2/'
-    test_loader = DataLoader(dataset_test,batch_size=hparams['batch_size'],shuffle=True,drop_last=True)
+    num_classes = 24
+    # dataset_test = CelebALoader(root_folder=hparams['dataroot']) #'/home/yellow/deep-learning-and-practice/hw7/dataset/task_2/'
+    # test_loader = DataLoader(dataset_test,batch_size=hparams['batch_size'],shuffle=True,drop_last=True)
+    dataset_test = CLEVRDataset(root_folder=hparams['dataroot'],img_folder=hparams['dataroot']+'images/')
+    test_loader = DataLoader(dataset_test,batch_size=32,shuffle=True,drop_last=True)
     model = Glow(image_shape, hparams['hidden_channels'], hparams['K'], hparams['L'], hparams['actnorm_scale'],
                  hparams['flow_permutation'], hparams['flow_coupling'], hparams['LU_decomposed'], num_classes,
                  hparams['learn_top'], hparams['y_condition'])

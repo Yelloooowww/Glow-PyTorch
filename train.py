@@ -15,7 +15,7 @@ from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint, Timer
 from ignite.metrics import RunningAverage, Loss
 
-from datasets import get_CIFAR10, get_SVHN
+from datasets import postprocess
 from mydataset import get_CelebA_data, CelebALoader, get_test_conditions, get_new_test_conditions, CLEVRDataset
 from model import Glow
 from evaluator import evaluation_model
@@ -53,6 +53,8 @@ def compute_loss_y(nll, y_logits, y_weight, y, multi_class, reduction="mean"):
     loss_classes = F.binary_cross_entropy_with_logits(y_logits, y)
     losses["loss_classes"] = loss_classes
     losses["total_loss"] = losses["nll"] + y_weight * loss_classes
+
+    wandb.log({"total_loss": losses["total_loss"].item(), "loss_classes": losses["loss_classes"].item()})
 
     return losses
 
@@ -167,7 +169,6 @@ def main(
 
         optimizer.step()
 
-        wandb.log({"loss": losses["total_loss"].item()})
 
         return losses
 
@@ -193,21 +194,7 @@ def main(
     pbar = ProgressBar()
     pbar.attach(trainer, metric_names=monitoring_metrics)
 
-    ## load pre-trained model if given
-    # if saved_model:
-    #     model.load_state_dict(torch.load(saved_model))
-    #     model.set_actnorm_init()
-    #
-    #     if saved_optimizer:
-    #         optimizer.load_state_dict(torch.load(saved_optimizer))
-    #
-    #     file_name, ext = os.path.splitext(saved_model)
-    #     resume_epoch = int(file_name.split("_")[-1])
-    #
-    #     @trainer.on(Events.STARTED)
-    #     def resume_training(engine):
-    #         engine.state.epoch = resume_epoch
-    #         engine.state.iteration = resume_epoch * len(engine.state.dataloader)
+
     if saved_model:
         model.load_state_dict(torch.load(saved_model, map_location="cpu")['model'])
         model.set_actnorm_init()
@@ -245,53 +232,24 @@ def main(
             model.eval()
             with torch.no_grad():
                 test_conditions = get_test_conditions(args.dataroot).cuda()
-                tmp_x = torch.rand( ( len(test_conditions) , image_shape[2], image_shape[0], image_shape[0]) ).cuda()
-                z, _, _ = model(tmp_x, test_conditions)
-                z = torch.randn(z.size()).cuda()
-                predict_x = model(y_onehot=test_conditions, z=z, temperature=1, reverse=True)
+                predict_x = postprocess(model(y_onehot=test_conditions, temperature=1, reverse=True)).float()
                 for t in predict_x:  # loop over mini-batch dimension
                     norm_range(t, None)
                 score = evaluator.eval(predict_x, test_conditions)
-                save_image(predict_x, args.output_dir+f"/Epoch{engine.state.epoch}_score{score:.3f}.png")
+                save_image(predict_x.float(), args.output_dir+f"/Epoch{engine.state.epoch}_score{score:.3f}.png")
 
-                new_test_conditions = get_new_test_conditions(args.dataroot).cuda()
-                new_predict_x = model(y_onehot=new_test_conditions, z=z, temperature=1, reverse=True)
-                for t in new_predict_x:  # loop over mini-batch dimension
+                test_conditions = get_new_test_conditions(args.dataroot).cuda()
+                predict_x = postprocess(model(y_onehot=test_conditions, temperature=1, reverse=True)).float()
+                for t in predict_x:  # loop over mini-batch dimension
                     norm_range(t, None)
-                new_score = evaluator.eval(new_predict_x, new_test_conditions)
-                save_image(new_predict_x, args.output_dir+f"/Epoch{engine.state.epoch}_newscore{new_score:.3f}.png")
+                newscore = evaluator.eval(predict_x.float(), test_conditions)
+                save_image(predict_x.float(), args.output_dir+f"/Epoch{engine.state.epoch}_newscore{newscore:.3f}.png")
 
-                losses = ", ".join([f"{key}: {value:.2f}" for key, value in engine.state.metrics.items()])
-                print(f"Iter: {engine.state.iteration}  score:{score:.3f} newscore:{new_score:.3f} {losses}")
-                wandb.log({"score": score, "new_score": new_score})
+                print(f"Iter: {engine.state.iteration}  score:{score:.3f} newscore:{newscore:.3f} ")
+                wandb.log({"score": score, "new_score": newscore})
 
 
-    # @trainer.on(Events.EPOCH_COMPLETED)
-    # def evaluate(engine):
-    #     evaluator.run(test_loader)
-    #
-    #     scheduler.step()
-    #     metrics = evaluator.state.metrics
-    #
-    #     losses = ", ".join([f"{key}: {value:.2f}" for key, value in metrics.items()])
-    #
-    #     print(f"Validation Results - Epoch: {engine.state.epoch} {losses}")
-    #
-    # timer = Timer(average=True)
-    # timer.attach(
-    #     trainer,
-    #     start=Events.EPOCH_STARTED,
-    #     resume=Events.ITERATION_STARTED,
-    #     pause=Events.ITERATION_COMPLETED,
-    #     step=Events.ITERATION_COMPLETED,
-    # )
 
-    # @trainer.on(Events.EPOCH_COMPLETED)
-    # def print_times(engine):
-    #     pbar.log_message(
-    #         f"Epoch {engine.state.epoch} done. Time per batch: {timer.value():.3f}[s]"
-    #     )
-    #     timer.reset()
 
     trainer.run(train_loader, epochs)
 
