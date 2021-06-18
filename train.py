@@ -233,17 +233,13 @@ def main(
             with torch.no_grad():
                 test_conditions = get_test_conditions(args.dataroot).cuda()
                 predict_x = postprocess(model(y_onehot=test_conditions, temperature=1, reverse=True)).float()
-                for t in predict_x:  # loop over mini-batch dimension
-                    norm_range(t, None)
                 score = evaluator.eval(predict_x, test_conditions)
-                save_image(predict_x.float(), args.output_dir+f"/Epoch{engine.state.epoch}_score{score:.3f}.png")
+                save_image(predict_x.float(), args.output_dir+f"/Epoch{engine.state.epoch}_score{score:.3f}.png", normalize=True)
 
                 test_conditions = get_new_test_conditions(args.dataroot).cuda()
                 predict_x = postprocess(model(y_onehot=test_conditions, temperature=1, reverse=True)).float()
-                for t in predict_x:  # loop over mini-batch dimension
-                    norm_range(t, None)
                 newscore = evaluator.eval(predict_x.float(), test_conditions)
-                save_image(predict_x.float(), args.output_dir+f"/Epoch{engine.state.epoch}_newscore{newscore:.3f}.png")
+                save_image(predict_x.float(), args.output_dir+f"/Epoch{engine.state.epoch}_newscore{newscore:.3f}.png", normalize=True)
 
                 print(f"Iter: {engine.state.iteration}  score:{score:.3f} newscore:{newscore:.3f} ")
                 wandb.log({"score": score, "new_score": newscore})

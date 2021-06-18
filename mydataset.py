@@ -46,7 +46,6 @@ class CLEVRDataset(data.Dataset):
         :param json_path: train.json
         """
         self.img_path = img_folder
-        self.max_objects=0
         with open(os.path.join(root_folder, 'objects.json'), 'r') as file:
             self.classes = json.load(file)
         self.numclasses=len(self.classes)
@@ -56,10 +55,10 @@ class CLEVRDataset(data.Dataset):
             dict=json.load(file)
             for img_name,img_condition in dict.items():
                 self.img_names.append(img_name)
-                self.max_objects=max(self.max_objects,len(img_condition))
                 self.img_conditions.append([self.classes[condition] for condition in img_condition])
-        self.transformations=transforms.Compose([transforms.Resize((64,64)),transforms.ToTensor(),transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))])
-
+        self.transformations=transforms.Compose([transforms.Resize((64,64)),transforms.ToTensor()])
+        # self.transformations=transforms.Compose([transforms.Resize((64,64)),transforms.ToTensor(),transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))])
+        print("> Found %d images..." % (len(self.img_names)))
 
     def __len__(self):
         return len(self.img_names)
